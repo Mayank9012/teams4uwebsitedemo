@@ -1,0 +1,50 @@
+# Cloud Build Configuration for Google Cloud Run
+# This file enables automatic building and deployment from source control
+
+steps:
+  # Step 1: Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$SHORT_SHA'
+      - '.'
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=${_REGION}'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}'
+
+  # Step 2: Push the image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+
+  # Step 3: Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    args:
+      - 'run'
+      - '--filename=.'
+      - '--image=gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$SHORT_SHA'
+      - '--location=${_REGION}'
+      - '--output=/workspace/output'
+
+# Images to be pushed to registry
+images:
+  - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+  - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$SHORT_SHA'
+
+# Build configuration
+options:
+  machineType: 'N1_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+# Substitution variables
+substitutions:
+  _SERVICE_NAME: 'team4u-website'
+  _REGION: 'us-central1'
+  _CLUSTER_NAME: 'cloud-run'
+
+# Build timeout (in seconds)
+timeout: '1800s'

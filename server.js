@@ -1,33 +1,88 @@
+/**
+ * Production server for serving the React SPA built with Vite
+ * Listens on PORT environment variable (defaults to 8080 for Cloud Run)
+ * Handles SPA routing by serving index.html for non-existent routes
+ */
+
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
-const PORT = parseInt(process.env.PORT, 10) || 8080;
+const PORT = process.env.PORT || 8080;
 const HOST = '0.0.0.0';
-const staticDir = path.join(__dirname, 'dist');
 
-// Serve static files
-app.use(express.static(staticDir));
+// Middleware to handle graceful shutdown
+let server;
+const gracefulShutdown = () => {
+  console.log('Received shutdown signal, closing server gracefully...');
+  if (server) {
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(0);
+    });
+    // Force close after 30 seconds
+    setTimeout(() => {
+      console.error('Could not close connections in time, forcing shutdown');
+      process.exit(1);
+    }, 30000);
+  }
+};
 
-// SPA fallback to index.html
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
+
+// Serve static files from dist folder
+const distPath = path.join(__dirname, 'dist');
+
+// Check if dist folder exists
+if (!fs.existsSync(distPath)) {
+  console.error('ERROR: dist folder not found. Please run "npm run build" first.');
+  process.exit(1);
+}
+
+// Middleware
+app.use(express.static(distPath, {
+  maxAge: '1d', // Cache static assets for 1 day
+  etag: false,
+}));
+
+// Health check endpoint for Cloud Run
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'healthy' });
+});
+
+// SPA routing: Serve index.html for all non-asset routes
 app.get('*', (req, res) => {
-  res.sendFile(path.join(staticDir, 'index.html'));
+  // Don't serve index.html for API calls or actual files
+  if (req.accepts('html')) {
+    res.sendFile(path.join(distPath, 'index.html'), (err) => {
+      if (err) {
+        console.error('Error sending index.html:', err);
+        res.status(500).send('Server error');
+      }
+    });
+  } else {
+    res.status(404).send('Not Found');
+  }
 });
 
-// Graceful startup logging and error handling
-const server = app.listen(PORT, HOST, () => {
-  console.log(`Server listening on http://${HOST}:${PORT}`);
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Error:', err.message);
+  res.status(500).json({ error: 'Internal Server Error' });
 });
 
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught exception', err);
-  // let the container exit so the platform can restart if needed
+// Start server
+server = app.listen(PORT, HOST, () => {
+  console.log(`✓ Server running on http://${HOST}:${PORT}`);
+  console.log(`✓ Serving static files from: ${distPath}`);
+  console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`✓ Ready to accept connections...`);
+});
+
+// Handle server errors
+server.on('error', (err) => {
+  console.error('Server error:', err);
   process.exit(1);
 });
-
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled rejection', err);
-  process.exit(1);
-});
-
-module.exports = server;
