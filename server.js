@@ -5,14 +5,10 @@ const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 8080;
 const staticDir = path.join(__dirname, 'dist');
 
-// Serve static files
 app.use(express.static(staticDir));
+app.get('*', (req, res) => res.sendFile(path.join(staticDir, 'index.html')));
 
-// SPA fallback to index.html
-app.get('*', (req, res) => {
-  res.sendFile(path.join(staticDir, 'index.html'));
-});
-
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+// bind explicitly to 0.0.0.0 so cloud runtimes can connect
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server listening on 0.0.0.0:${PORT}`);
 });
