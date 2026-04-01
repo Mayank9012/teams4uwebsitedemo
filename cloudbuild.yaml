@@ -1,50 +1,64 @@
-# Cloud Build Configuration for Google Cloud Run
-# This file enables automatic building and deployment from source control
+# Google Cloud Build Configuration
+# This configuration builds the Docker image and deploys to Cloud Run
 
 steps:
-  # Step 1: Build the Docker image
+  # Step 1: Build Docker image
   - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image'
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+      - 'gcr.io/$PROJECT_ID/teams4uwebsitedemo:latest'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/teams4uwebsitedemo:$SHORT_SHA'
+      - '-f'
+      - 'Dockerfile'
       - '.'
     env:
-      - 'CLOUDSDK_COMPUTE_ZONE=${_REGION}'
-      - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER_NAME}'
+      - 'DOCKER_BUILDKIT=1'
 
-  # Step 2: Push the image to Container Registry
+  # Step 2: Push image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-image'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+      - 'gcr.io/$PROJECT_ID/teams4uwebsitedemo'
 
   # Step 3: Deploy to Cloud Run
-  - name: 'gcr.io/cloud-builders/gke-deploy'
+  - name: 'gcr.io/cloud-builders/run'
+    id: 'deploy-cloudrun'
     args:
-      - 'run'
-      - '--filename=.'
-      - '--image=gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$SHORT_SHA'
-      - '--location=${_REGION}'
-      - '--output=/workspace/output'
+      - 'deploy'
+      - 'teams4uwebsitedemo'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/teams4uwebsitedemo:$SHORT_SHA'
+      - '--platform'
+      - 'managed'
+      - '--region'
+      - 'asia-southeast1'
+      - '--port'
+      - '8080'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '512Mi'
+      - '--cpu'
+      - '1'
+      - '--timeout'
+      - '3600'
+      - '--max-instances'
+      - '100'
+      - '--set-env-vars'
+      - 'NODE_ENV=production'
 
-# Images to be pushed to registry
+# Images to push to registry
 images:
-  - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
-  - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/teams4uwebsitedemo:latest'
+  - 'gcr.io/$PROJECT_ID/teams4uwebsitedemo:$SHORT_SHA'
 
-# Build configuration
+# Build options
 options:
   machineType: 'N1_HIGHCPU_8'
   logging: CLOUD_LOGGING_ONLY
 
-# Substitution variables
-substitutions:
-  _SERVICE_NAME: 'team4u-website'
-  _REGION: 'us-central1'
-  _CLUSTER_NAME: 'cloud-run'
-
-# Build timeout (in seconds)
+# Build timeout
 timeout: '1800s'
